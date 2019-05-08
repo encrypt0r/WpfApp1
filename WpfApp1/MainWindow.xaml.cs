@@ -62,23 +62,26 @@ namespace WpfApp1
 
                 int processed = 0;
 
-                Parallel.ForEach(files, async file =>
+                await Task.Run(() =>
                 {
-                    _cts.Token.ThrowIfCancellationRequested();
-
-                    var name = file.Split('\\', '/').Last();
-                    var contains = await FileContains(file, search);
-
-                    Interlocked.Increment(ref processed);
-
-                    await Dispatcher.InvokeAsync(() =>
+                    Parallel.ForEach(files, file =>
                     {
-                        progressBar.Value = (double)processed / files.Count;
-                        statusTextBlock.Text = $"{processed} / {files.Count} ({progressBar.Value * 100:N2}%)";
-                        if (contains)
+                        _cts.Token.ThrowIfCancellationRequested();
+
+                        var name = file.Split('\\', '/').Last();
+                        var contains = FileContains(file, search);
+
+                        Interlocked.Increment(ref processed);
+
+                        Dispatcher.Invoke(() =>
                         {
-                            resultsListBox.Items.Add(name);
-                        }
+                            progressBar.Value = (double)processed / files.Count;
+                            statusTextBlock.Text = $"{processed} / {files.Count} ({progressBar.Value * 100:N2}%)";
+                            if (contains)
+                            {
+                                resultsListBox.Items.Add(name);
+                            }
+                        });
                     });
                 });
             }
@@ -99,7 +102,7 @@ namespace WpfApp1
             }
         }
 
-        private Task<bool> FileContains(string path, string search)
+        private bool FileContains(string path, string search)
         {
             if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
                 return ReadTextFile(path, search);
@@ -109,36 +112,31 @@ namespace WpfApp1
             throw new ArgumentOutOfRangeException(nameof(path));
         }
 
-        private Task<bool> ReadPdfFile(string pdf, string search)
+        private bool ReadPdfFile(string path, string search)
         {
-            return Task.Run(() =>
+            var builder = new StringBuilder();
+            PdfLoadedDocument loadedDocument = new PdfLoadedDocument(path);
+
+            foreach (PdfLoadedPage page in loadedDocument.Pages)
             {
-                var builder = new StringBuilder();
-                PdfLoadedDocument loadedDocument = new PdfLoadedDocument(pdf);
-
-                foreach (PdfLoadedPage page in loadedDocument.Pages)
-                {
-                    var content = page.ExtractText();
-                    if (content.IndexOf(search, StringComparison.OrdinalIgnoreCase) > 0)
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
-            });
-        }
-
-        private async Task<bool> ReadTextFile(string text, string search)
-        {
-            using (var f = File.OpenRead(text))
-            using (var r = new StreamReader(f))
-            {
-                var content = await r.ReadToEndAsync();
+                var content = page.ExtractText();
                 if (content.IndexOf(search, StringComparison.OrdinalIgnoreCase) > 0)
                 {
                     return true;
                 }
+            }
+
+            loadedDocument.Dispose();
+
+            return false;
+        }
+
+        private bool ReadTextFile(string path, string search)
+        {
+            var content = File.ReadAllText(path);
+            if (content.IndexOf(search, StringComparison.OrdinalIgnoreCase) > 0)
+            {
+                return true;
             }
 
             return false;
@@ -223,13 +221,14 @@ namespace WpfApp1
 
                 int processed = 0;
 
-                Parallel.ForEach(pdfs, async pdf =>
+                await Task.Run(() =>
                 {
-                    _cts.Token.ThrowIfCancellationRequested();
-
-                    var name = pdf.Split('\\', '/').Last();
-                    var document = await Task.Run<string>(() =>
+                    Parallel.ForEach(pdfs, async pdf =>
                     {
+                        _cts.Token.ThrowIfCancellationRequested();
+
+                        var name = pdf.Split('\\', '/').Last();
+
                         var builder = new StringBuilder();
                         PdfLoadedDocument loadedDocument = new PdfLoadedDocument(pdf);
 
@@ -238,17 +237,19 @@ namespace WpfApp1
                             builder.AppendLine(page.ExtractText());
                         }
 
-                        return builder.ToString();
-                    });
+                        loadedDocument.Dispose();
 
-                    File.WriteAllText(Path.Combine(destination, name + ".txt"), document);
+                        var document = builder.ToString();
 
-                    Interlocked.Increment(ref processed);
+                        File.WriteAllText(Path.Combine(destination, name + ".txt"), document);
 
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        progressBar.Value = (double)processed / pdfs.Count;
-                        statusTextBlock.Text = $"{processed} / {pdfs.Count} ({progressBar.Value * 100:N2}%)";
+                        Interlocked.Increment(ref processed);
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            progressBar.Value = (double)processed / pdfs.Count;
+                            statusTextBlock.Text = $"{processed} / {pdfs.Count} ({progressBar.Value * 100:N2}%)";
+                        });
                     });
                 });
             }
