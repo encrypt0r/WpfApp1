@@ -54,7 +54,7 @@ namespace WpfApp1
 
                 resultsListBox.Items.Clear();
 
-                var files = Directory.EnumerateFiles(folder, "*.*")
+                var files = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
                                      .Where(f =>
                                            f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ||
                                            f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
@@ -64,7 +64,7 @@ namespace WpfApp1
 
                 await Task.Run(() =>
                 {
-                    Parallel.ForEach(files, file =>
+                    foreach(var file in files)
                     {
                         _cts.Token.ThrowIfCancellationRequested();
 
@@ -82,7 +82,7 @@ namespace WpfApp1
                                 resultsListBox.Items.Add(name);
                             }
                         });
-                    });
+                    }
                 });
             }
             catch (OperationCanceledException)
@@ -215,15 +215,15 @@ namespace WpfApp1
                 if (destination == null)
                     return;
 
-                var pdfs = Directory.EnumerateFiles(source, "*.pdf").ToList();
+                var pdfs = Directory.EnumerateFiles(source, "*.pdf", SearchOption.AllDirectories).ToList();
 
                 progressBar.Value = 0;
 
                 int processed = 0;
 
-                await Task.Run(() =>
+                await Task.Run(async () =>
                 {
-                    Parallel.ForEach(pdfs, async pdf =>
+                    foreach(var pdf in pdfs)
                     {
                         _cts.Token.ThrowIfCancellationRequested();
 
@@ -250,7 +250,7 @@ namespace WpfApp1
                             progressBar.Value = (double)processed / pdfs.Count;
                             statusTextBlock.Text = $"{processed} / {pdfs.Count} ({progressBar.Value * 100:N2}%)";
                         });
-                    });
+                    }
                 });
             }
             catch (OperationCanceledException)
