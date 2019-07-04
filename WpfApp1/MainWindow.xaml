@@ -17,35 +17,40 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition />
-            <ColumnDefinition Width="10" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
+        <GroupBox Header="Extract Settings" Grid.Row="4">
+            <StackPanel>
+                <TextBlock Text="Source (PDFs folder): " Margin="0, 5" FontWeight="Bold" Foreground="Gray"/>
+                <DockPanel LastChildFill="True">
+                    <Button x:Name="BrowseSource" Content="Browse" DockPanel.Dock="Right" Click="Browse_Click" />
+                    <TextBox x:Name="SourceTextBox"/>
+                </DockPanel>
 
-        <TextBlock Text="Folder: " />
-        <TextBox x:Name="folderTextBox" Grid.Row="1" />
-        <Button x:Name="Browse" Content="Browse" Grid.Row="1" Grid.Column="2" Click="Browse_Click" />
+                <TextBlock Text="Destination (Text files folder): " FontWeight="Bold" Margin="0, 5" Foreground="Gray"/>
+                <DockPanel LastChildFill="True">
+                    <Button x:Name="BrowseDestination" Content="Browse" DockPanel.Dock="Right" Click="BrowseDestination_Click" />
+                    <TextBox x:Name="DestinationTextBox"/>
+                </DockPanel>
 
-        <TextBlock Text="Search: " Grid.Row="2" />
-        <TextBox x:Name="searchTextBox" Grid.Row="3" Grid.ColumnSpan="3" />
-
-        <ListBox x:Name="resultsListBox" Grid.Row="4" Grid.ColumnSpan="3" Margin="0, 5, 0, 0">
-            <ListBox.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Header="Copy" Click="Copy_Click" />
-                </ContextMenu>
-            </ListBox.ContextMenu>
-        </ListBox>
+                <TextBlock FontWeight="Bold" Foreground="Gray" Margin="0, 5" Text="What to do if the input file already existed in the output folder?" />
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SkipRadioButton" Content="Skip that file" IsChecked="True" GroupName="DuplicatePolicy" />
+                    <Border Width="10" />
+                    <RadioButton x:Name="ReplaceRadioButton" Content="Replace it" GroupName="DuplicatePolicy"/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
 
         <StackPanel Margin="0, 5" Grid.Row="5" Grid.ColumnSpan="3" >
-            <Button x:Name="Search" Padding="20, 10" ToolTip="Search for the current text in PDF and text files." Content="Search" Click="Search_Click" />
-            <TextBlock Margin="0, 2" Height="0" />
             <Button x:Name="Extract" Padding="20, 10" ToolTip="Extract text from PDF files for faster search."  Content="Extract" Click="Extract_Click" />
         </StackPanel>
-        
-        <ProgressBar x:Name="progressBar" Minimum="0" Maximum="1" Grid.Row="6" />
-        <TextBlock x:Name="statusTextBlock" TextAlignment="Center" Grid.Row="6" />
-        <Button x:Name="Cancel" Content="Cancel" Grid.Column="2" Grid.Row="6" IsEnabled="False" />
+
+        <DockPanel LastChildFill="True" Grid.Row="6">
+            <Button x:Name="Cancel" Content="Cancel" Click="Cancel_Click" DockPanel.Dock="Right" IsEnabled="False" />
+            <Grid>
+                <ProgressBar x:Name="progressBar" Minimum="0" Maximum="1" Grid.Row="6" />
+                <TextBlock x:Name="statusTextBlock" TextAlignment="Center" />
+            </Grid>
+        </DockPanel>
+
     </Grid>
 </Window>

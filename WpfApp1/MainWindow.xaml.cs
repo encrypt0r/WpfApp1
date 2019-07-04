@@ -25,130 +25,13 @@ namespace WpfApp1
 
         private CancellationTokenSource _cts;
 
-        private async void Search_Click(object sender, RoutedEventArgs e)
-        {
-            if (_cts != null)
-            {
-                _cts.Cancel();
-                return;
-            }
-
-            try
-            {
-                _cts = new CancellationTokenSource();
-                ChangeEnability(false);
-
-                var folder = folderTextBox.Text;
-                var search = searchTextBox.Text;
-
-                if (string.IsNullOrWhiteSpace(search))
-                {
-                    MessageBox.Show("Please write something to search for!");
-                    return;
-                }
-                else if (!Directory.Exists(folder))
-                {
-                    MessageBox.Show("This folder doesn't exist!");
-                    return;
-                }
-
-                resultsListBox.Items.Clear();
-
-                var files = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
-                                     .Where(f =>
-                                           f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ||
-                                           f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-                                     .ToList();
-
-                int processed = 0;
-
-                await Task.Run(() =>
-                {
-                    foreach(var file in files)
-                    {
-                        _cts.Token.ThrowIfCancellationRequested();
-
-                        var name = file.Split('\\', '/').Last();
-                        var contains = FileContains(file, search);
-
-                        Interlocked.Increment(ref processed);
-
-                        Dispatcher.Invoke(() =>
-                        {
-                            progressBar.Value = (double)processed / files.Count;
-                            statusTextBlock.Text = $"{processed} / {files.Count} ({progressBar.Value * 100:N2}%)";
-                            if (contains)
-                            {
-                                resultsListBox.Items.Add(name);
-                            }
-                        });
-                    }
-                });
-            }
-            catch (OperationCanceledException)
-            {
-
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString());
-            }
-            finally
-            {
-                ChangeEnability(true);
-                statusTextBlock.Text = "";
-                progressBar.Value = 0;
-                _cts = null;
-            }
-        }
-
-        private bool FileContains(string path, string search)
-        {
-            if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                return ReadTextFile(path, search);
-            else if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-                return ReadPdfFile(path, search);
-
-            throw new ArgumentOutOfRangeException(nameof(path));
-        }
-
-        private bool ReadPdfFile(string path, string search)
-        {
-            var builder = new StringBuilder();
-            PdfLoadedDocument loadedDocument = new PdfLoadedDocument(path);
-
-            foreach (PdfLoadedPage page in loadedDocument.Pages)
-            {
-                var content = page.ExtractText();
-                if (content.IndexOf(search, StringComparison.OrdinalIgnoreCase) > 0)
-                {
-                    return true;
-                }
-            }
-
-            loadedDocument.Dispose();
-
-            return false;
-        }
-
-        private bool ReadTextFile(string path, string search)
-        {
-            var content = File.ReadAllText(path);
-            if (content.IndexOf(search, StringComparison.OrdinalIgnoreCase) > 0)
-            {
-                return true;
-            }
-
-            return false;
-        }
-
         private void ChangeEnability(bool value)
         {
-            Search.IsEnabled = value;
             Extract.IsEnabled = value;
-            Browse.IsEnabled = value;
-            folderTextBox.IsEnabled = value;
-            searchTextBox.IsEnabled = value;
+            BrowseSource.IsEnabled = value;
+            BrowseDestination.IsEnabled = value;
+            SourceTextBox.IsEnabled = value;
+            DestinationTextBox.IsEnabled = value;
 
             Cancel.IsEnabled = !value;
         }
@@ -171,22 +54,8 @@ namespace WpfApp1
             var path = GetFolderPathFromUser();
             if (path != null)
             {
-                folderTextBox.Text = path;
+                SourceTextBox.Text = path;
             }
-        }
-
-        private void Copy_Click(object sender, RoutedEventArgs e)
-        {
-            var builder = new StringBuilder();
-            foreach (var item in resultsListBox.Items)
-            {
-                if (item is string text)
-                {
-                    builder.AppendLine(text);
-                }
-            }
-
-            Clipboard.SetText(builder.ToString());
         }
 
         private async void Extract_Click(object sender, RoutedEventArgs e)
@@ -202,8 +71,21 @@ namespace WpfApp1
                 _cts = new CancellationTokenSource();
                 ChangeEnability(false);
 
-                var source = folderTextBox.Text;
-                var search = searchTextBox.Text;
+                var source = SourceTextBox.Text;
+                var destination = DestinationTextBox.Text;
+
+                if (string.IsNullOrWhiteSpace(source) || !Directory.Exists(source))
+                {
+                    MessageBox.Show("Please specify a valid source folder!");
+                    return;
+                }
+                else if (string.IsNullOrWhiteSpace(destination))
+                {
+                    MessageBox.Show("Please specify destination folder!");
+                    return;
+                }
+  
+                var skipDuplicateFiles = SkipRadioButton.IsChecked == true;
 
                 if (!Directory.Exists(source))
                 {
@@ -211,45 +93,55 @@ namespace WpfApp1
                     return;
                 }
 
-                var destination = GetFolderPathFromUser();
-                if (destination == null)
-                    return;
-
                 var pdfs = Directory.EnumerateFiles(source, "*.pdf", SearchOption.AllDirectories).ToList();
 
                 progressBar.Value = 0;
 
                 int processed = 0;
+                statusTextBlock.Text = "Starting...";
 
                 await Task.Run(async () =>
                 {
-                    foreach(var pdf in pdfs)
+                    try
                     {
-                        _cts.Token.ThrowIfCancellationRequested();
-
-                        var name = pdf.Split('\\', '/').Last();
-
-                        var builder = new StringBuilder();
-                        PdfLoadedDocument loadedDocument = new PdfLoadedDocument(pdf);
-
-                        foreach (PdfLoadedPage page in loadedDocument.Pages)
+                        foreach (var pdf in pdfs)
                         {
-                            builder.AppendLine(page.ExtractText());
+                            _cts.Token.ThrowIfCancellationRequested();
+
+                            var name = pdf.Split('\\', '/').Last();
+                            var destinationFile = Path.Combine(destination, name + ".txt");
+
+                            if (skipDuplicateFiles && File.Exists(destinationFile))
+                            {
+                                continue;
+                            }
+
+                            var builder = new StringBuilder();
+                            PdfLoadedDocument loadedDocument = new PdfLoadedDocument(pdf);
+
+                            foreach (PdfLoadedPage page in loadedDocument.Pages)
+                            {
+                                builder.AppendLine(page.ExtractText());
+                            }
+
+                            loadedDocument.Dispose();
+
+                            var document = builder.ToString();
+
+                            File.WriteAllText(Path.Combine(destination, name + ".txt"), document);
+
+                            Interlocked.Increment(ref processed);
+
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                progressBar.Value = (double)processed / pdfs.Count;
+                                statusTextBlock.Text = $"{processed} / {pdfs.Count} ({progressBar.Value * 100:N2}%)";
+                            });
                         }
+                    }
+                    catch (OperationCanceledException)
+                    {
 
-                        loadedDocument.Dispose();
-
-                        var document = builder.ToString();
-
-                        File.WriteAllText(Path.Combine(destination, name + ".txt"), document);
-
-                        Interlocked.Increment(ref processed);
-
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            progressBar.Value = (double)processed / pdfs.Count;
-                            statusTextBlock.Text = $"{processed} / {pdfs.Count} ({progressBar.Value * 100:N2}%)";
-                        });
                     }
                 });
             }
@@ -267,6 +159,20 @@ namespace WpfApp1
                 statusTextBlock.Text = "";
                 progressBar.Value = 0;
                 _cts = null;
+            }
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            _cts.Cancel();
+        }
+
+        private void BrowseDestination_Click(object sender, RoutedEventArgs e)
+        {
+            var path = GetFolderPathFromUser();
+            if (path != null)
+            {
+                DestinationTextBox.Text = path;
             }
         }
     }
